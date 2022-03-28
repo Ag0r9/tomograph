@@ -26,9 +26,11 @@ uploaded_file = st.file_uploader('Choose an image...', type=['png', 'jpg', 'jpeg
 if uploaded_file is not None:
     if uploaded_file.type == 'image/jpeg':
         img = skimage.io.imread(uploaded_file, as_gray=True)
+        final_picture = process_photo(img, step, no_of_detectors, bandwidth, filter_)
+        save_dicom(final_picture)
     elif uploaded_file.type == 'application/octet-stream':
         ds = pydicom.dcmread(uploaded_file)
         show_data(ds)
         img = ds.pixel_array/255.0
-    final_picture = process_photo(img, step, no_of_detectors, bandwidth, filter_)
-    save_dicom(final_picture)
+        final_picture = process_photo(img, step, no_of_detectors, bandwidth, filter_)
+        save_dicom(final_picture)
