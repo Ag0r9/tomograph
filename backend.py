@@ -1,9 +1,12 @@
+import pydicom
 import streamlit as st
 from tomograph import Tomograph
 import matplotlib.pyplot as plt
-from pydicom.dataset import FileDataset, FileMetaDataset
-from pydicom.uid import UID
-import tempfile
+from pydicom.dataset import FileDataset, Dataset, validate_file_meta
+from pydicom.uid import UID, generate_uid
+from pydicom._storage_sopclass_uids import MRImageStorage
+from datetime import datetime
+import numpy as np
 
 
 def get_picture(picture):
@@ -43,36 +46,88 @@ def show_data(ds):
     st.header('Data')
     pat_name = f'{ds.PatientName.given_name} {ds.PatientName.family_name}' if hasattr(ds, 'PatientName') else 'Unknown'
     st.write(f"Patient's Name: {pat_name}")
+    st.write(f"Content Date: {ds.ContentDate if hasattr(ds, 'ContentDate') else 'Unknown'}")
     st.write(f"Patient ID: {ds.PatientID if hasattr(ds, 'PatientID') else 'Unknown'}")
+    st.write(f"Comments: {ds.PatientComments if hasattr(ds, 'PatientComments') else 'Unknown'}")
     st.write(f"Modality: {ds.Modality if hasattr(ds, 'Modality') else 'Unknown'}")
     st.write(f"Study Date: {ds.StudyDate if hasattr(ds, 'StudyDate') else 'Unknown'}")
     st.write(f"Image size: {ds.Rows} x {ds.Columns}")
     st.write(f"Pixel Spacing: {ds.PixelSpacing if hasattr(ds, 'PixelSpacing') else 'Unknown'}")
 
 
+def read_dicom(path):
+    from pydicom import dcmread
+    ds = dcmread(path)
+    # assume dicom metadata identifiers are uppercase
+    keys = {x for x in dir(ds) if x[0].isupper()} - {'PixelData'}
+    meta = {x: getattr(ds, x) for x in keys}
+    image = ds.pixel_array
+    return image, meta
+
+
+def write_dicom(path, image, meta):
+    ds = Dataset()
+    ds.MediaStorageSOPClassUID = MRImageStorage
+    ds.MediaStorageSOPInstanceUID = generate_uid()
+    ds.TransferSyntaxUID = pydicom.uid.ExplicitVRLittleEndian
+
+    fd = FileDataset(path, {}, file_meta=ds, preamble=b'\0' * 128)
+    fd.is_little_endian = True
+    fd.is_implicit_VR = False
+
+    fd.SOPClassUID = MRImageStorage
+    fd.PatientName = 'Test^Firstname'
+    fd.PatientID = '123456'
+    now = datetime.now()
+    fd.StudyDate = now.strftime('%Y%m%d')
+
+    fd.Modality = 'MR'
+    fd.SeriesInstanceUID = generate_uid()
+    fd.StudyInstanceUID = generate_uid()
+    fd.FrameOfReferenceUID = generate_uid()
+
+    fd.ImagesInAcquisition = '1'
+    fd.Rows = image.shape[0]
+    fd.Columns = image.shape[1]
+    fd.InstanceNumber = 1
+
+    fd.RescaleIntercept = '0'
+    fd.RescaleSlope = '1'
+    fd.PixelSpacing = r'1\1'
+    fd.PhotometricInterpretation = 'MONOCHROME2'
+    fd.PixelRepresentation = 1
+
+    fd.ImagePositionPatient = r'0\0\1'
+    fd.ImageOrientationPatient = r'1\0\0\0\-1\0'
+    fd.ImageType = r'ORIGINAL\PRIMARY\AXIAL'
+
+    fd.BitsStored = 16
+    fd.BitsAllocated = 16
+    fd.SamplesPerPixel = 1
+    fd.HighBit = 15
+
+    for key, value in meta.items():
+        setattr(fd, key, value)
+
+    validate_file_meta(fd.file_meta, enforce_standard=True)
+
+    fd.PixelData = (image * 255).astype(np.uint16).tobytes()
+    fd.save_as(path)
+
+
 def save_dicom(picture):
-    st.header('Save DICOM file')
-    with st.form('Siema'):
-        surname_name = st.text_input('Nazwisko i imię')
+    st.header('Save as DICOM file')
+    with st.form('save_me'):
+        surname_name = st.text_input('Name and surname')
         pesel = st.text_input('PESEL')
-        test_date = st.date_input('Data badania')
-        comment = st.text_area('Komentarz')
+        test_date = st.date_input('Content date')
+        comment = st.text_area('Comment')
         save_btn = st.form_submit_button('Save me!')
         if save_btn:
-            suffix = '.dcm'
-            filename_little_endian = tempfile.NamedTemporaryFile(suffix=suffix).name
-            file_meta = FileMetaDataset()
-            file_meta.MediaStorageSOPClassUID = UID('1.2.840.10008.5.1.4.1.1.2')
-            file_meta.MediaStorageSOPInstanceUID = UID("1.2.3")
-            file_meta.ImplementationClassUID = UID("1.2.3.4")
-
-            ds = FileDataset(filename_little_endian, {},
-                             file_meta=file_meta, preamble=b"\0" * 128)
-
-            ds.PatientName = surname_name
-            ds.PatientID = pesel
-            ds.ContentDate = test_date
-            ds.PatientComments = comment
-
-            ds.save_as(filename_little_endian)
-
+            timestamp = str(datetime.timestamp(datetime.now())).split('.')[0]
+            write_dicom(f'results/results_{timestamp}.dcm', picture, dict(
+                PatientName=surname_name,
+                PatientID=pesel,
+                ImageComments=comment,
+                StudyDate=test_date
+            ))
