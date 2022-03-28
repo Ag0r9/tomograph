@@ -1,4 +1,4 @@
-from backend import process_photo, show_data
+from backend import process_photo, show_data, save_dicom
 
 import skimage
 import streamlit as st
@@ -26,8 +26,9 @@ uploaded_file = st.file_uploader('Choose an image...', type=['png', 'jpg', 'jpeg
 if uploaded_file is not None:
     if uploaded_file.type == 'image/jpeg':
         img = skimage.io.imread(uploaded_file, as_gray=True)
-        process_photo(img, step, no_of_detectors, bandwidth, filter_)
+        final_picture = process_photo(img, step, no_of_detectors, bandwidth, filter_)
     elif uploaded_file.type == 'application/octet-stream':
         ds = pydicom.dcmread(uploaded_file)
         show_data(ds)
-        process_photo(ds.pixel_array/255.0, step, no_of_detectors, bandwidth, filter_)
+        final_picture = process_photo(ds.pixel_array/255.0, step, no_of_detectors, bandwidth, filter_)
+        save_dicom(final_picture)
