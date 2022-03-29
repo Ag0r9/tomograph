@@ -60,7 +60,7 @@ def read_dicom(path):
     ds = dcmread(path)
     # assume dicom metadata identifiers are uppercase
     keys = {x for x in dir(ds) if x[0].isupper()} - {'PixelData'}
-    meta = {x: getattr(ds, x) for x in keys}
+    meta = {key: getattr(ds, key) for key in keys}
     image = ds.pixel_array
     return image, meta
 
@@ -81,7 +81,7 @@ def write_dicom(path, image, meta):
     now = datetime.now()
     fd.StudyDate = now.strftime('%Y%m%d')
 
-    fd.Modality = 'MR'
+    fd.Modality = 'CT'
     fd.SeriesInstanceUID = generate_uid()
     fd.StudyInstanceUID = generate_uid()
     fd.FrameOfReferenceUID = generate_uid()
