@@ -24,22 +24,22 @@ def process_photo(img, step, no_of_detectors, bandwidth, filter_):
     get_picture(tom.original_image)
     if filter_:
         st.subheader('Filtered sinogram')
-        get_picture(tom.filtered_sinogram)
+        get_picture(tom.get_filtered_sinogram())
         st.subheader('Filtered inverse')
-        get_picture(tom.image_filtered_result)
+        get_picture(tom.get_filtered_result())
         st.subheader('Progress')
         progress = st.slider('Progress', 0, tom.n_views_stored)
-        get_picture(tom.image_filtered_storage[progress])
-        return tom.image_filtered_result
+        get_picture(tom.get_filtered_storage()[progress])
+        return tom.get_filtered_result()
     else:
         st.subheader('Sinogram')
-        get_picture(tom.filtered_sinogram)
+        get_picture(tom.get_sinogram())
         st.subheader('Inverse')
-        get_picture(tom.image_result)
+        get_picture(tom.get_result())
         st.subheader('Progress')
         progress = st.slider('Progress', 0, tom.n_views_stored)
-        get_picture(tom.image_storage[progress])
-        return tom.image_result
+        get_picture(tom.get_storage()[progress])
+        return tom.get_result()
 
 
 def show_data(ds):
@@ -80,6 +80,7 @@ def write_dicom(path, image, meta):
     fd.PatientID = '123456'
     now = datetime.now()
     fd.StudyDate = now.strftime('%Y%m%d')
+    fd.PatientComments = 'None'
 
     fd.Modality = 'CT'
     fd.SeriesInstanceUID = generate_uid()
@@ -97,9 +98,7 @@ def write_dicom(path, image, meta):
     fd.PhotometricInterpretation = 'MONOCHROME2'
     fd.PixelRepresentation = 1
 
-    fd.ImagePositionPatient = r'0\0\1'
-    fd.ImageOrientationPatient = r'1\0\0\0\-1\0'
-    fd.ImageType = r'ORIGINAL\PRIMARY\AXIAL'
+    fd.ImageType = r'ORIGINAL\PRIMARY'
 
     fd.BitsStored = 16
     fd.BitsAllocated = 16
@@ -128,6 +127,6 @@ def save_dicom(picture):
             write_dicom(f'results/results_{timestamp}.dcm', picture, dict(
                 PatientName=surname_name,
                 PatientID=pesel,
-                ImageComments=comment,
+                PatientComments=comment,
                 StudyDate=test_date
             ))
