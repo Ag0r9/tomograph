@@ -28,7 +28,7 @@ def process_photo(img, step, no_of_detectors, bandwidth, filter_):
         st.subheader('Filtered inverse')
         get_picture(tom.get_filtered_result())
         st.subheader('Progress')
-        progress = st.slider('Progress', 0, tom.n_views_stored)
+        progress = st.slider('Progress', 0, tom.n_views_stored-1)
         get_picture(tom.get_filtered_storage()[progress])
         return tom.get_filtered_result()
     else:
@@ -37,7 +37,7 @@ def process_photo(img, step, no_of_detectors, bandwidth, filter_):
         st.subheader('Inverse')
         get_picture(tom.get_result())
         st.subheader('Progress')
-        progress = st.slider('Progress', 0, tom.n_views_stored)
+        progress = st.slider('Progress', 0, tom.n_views_stored-1)
         get_picture(tom.get_storage()[progress])
         return tom.get_result()
 
