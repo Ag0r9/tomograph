@@ -1,12 +1,13 @@
-import pydicom
 import streamlit as st
 from tomograph import Tomograph
-import matplotlib.pyplot as plt
-from pydicom.dataset import FileDataset, Dataset, validate_file_meta
-from pydicom.uid import UID, generate_uid
-from pydicom._storage_sopclass_uids import MRImageStorage
 from datetime import datetime
+
+import matplotlib.pyplot as plt
 import numpy as np
+import streamlit as st
+from pydicom.dataset import Dataset, FileMetaDataset
+
+from tomograph import Tomograph
 
 
 def get_picture(picture):
@@ -28,7 +29,7 @@ def process_photo(img, step, no_of_detectors, bandwidth, filter_):
         st.subheader('Filtered inverse')
         get_picture(tom.get_filtered_result())
         st.subheader('Progress')
-        progress = st.slider('Progress', 0, tom.n_views_stored-1)
+        progress = st.slider('Progress', 0, tom.n_views_stored - 1)
         get_picture(tom.get_filtered_storage()[progress])
         return tom.get_filtered_result()
     else:
@@ -37,7 +38,7 @@ def process_photo(img, step, no_of_detectors, bandwidth, filter_):
         st.subheader('Inverse')
         get_picture(tom.get_result())
         st.subheader('Progress')
-        progress = st.slider('Progress', 0, tom.n_views_stored-1)
+        progress = st.slider('Progress', 0, tom.n_views_stored - 1)
         get_picture(tom.get_storage()[progress])
         return tom.get_result()
 
@@ -66,52 +67,59 @@ def read_dicom(path):
 
 
 def write_dicom(path, image, meta):
+    file_meta = FileMetaDataset()
+
+    file_meta.FileMetaInformationGroupLength = 192
+    file_meta.FileMetaInformationVersion = b'\x00\x01'
+    file_meta.MediaStorageSOPClassUID = '1.2.840.10008.5.1.4.1.1.2'
+    file_meta.MediaStorageSOPInstanceUID = '1.3.6.1.4.1.5962.1.1.1.1.1.20040119072730.12322'
+    file_meta.TransferSyntaxUID = '1.2.840.10008.1.2.1'
+    file_meta.ImplementationClassUID = '1.3.6.1.4.1.5962.2'
+    file_meta.ImplementationVersionName = 'DCTOOL100'
+    file_meta.SourceApplicationEntityTitle = 'CLUNIE1'
+
     ds = Dataset()
-    ds.MediaStorageSOPClassUID = MRImageStorage
-    ds.MediaStorageSOPInstanceUID = generate_uid()
-    ds.TransferSyntaxUID = pydicom.uid.ExplicitVRLittleEndian
+    ds.SpecificCharacterSet = 'ISO_IR 100'
+    ds.ImageType = ['ORIGINAL', 'PRIMARY', 'AXIAL']
 
-    fd = FileDataset(path, {}, file_meta=ds, preamble=b'\0' * 128)
-    fd.is_little_endian = True
-    fd.is_implicit_VR = False
+    dt = datetime.now()
+    ds.ContentDate = dt.strftime('%Y-%m-%d')
+    time_str = dt.strftime('%H:%M')
+    ds.ContentTime = time_str
 
-    fd.SOPClassUID = MRImageStorage
-    fd.PatientName = 'Test^Firstname'
-    fd.PatientID = '123456'
-    now = datetime.now()
-    fd.StudyDate = now.strftime('%Y%m%d')
-    fd.PatientComments = 'None'
-
-    fd.Modality = 'CT'
-    fd.SeriesInstanceUID = generate_uid()
-    fd.StudyInstanceUID = generate_uid()
-    fd.FrameOfReferenceUID = generate_uid()
-
-    fd.ImagesInAcquisition = '1'
-    fd.Rows = image.shape[0]
-    fd.Columns = image.shape[1]
-    fd.InstanceNumber = 1
-
-    fd.RescaleIntercept = '0'
-    fd.RescaleSlope = '1'
-    fd.PixelSpacing = r'1\1'
-    fd.PhotometricInterpretation = 'MONOCHROME2'
-    fd.PixelRepresentation = 1
-
-    fd.ImageType = r'ORIGINAL\PRIMARY'
-
-    fd.BitsStored = 16
-    fd.BitsAllocated = 16
-    fd.SamplesPerPixel = 1
-    fd.HighBit = 15
+    ds.PatientName = 'Name^Surname'
+    ds.PatientID = '123456789'
 
     for key, value in meta.items():
-        setattr(fd, key, value)
+        setattr(ds, key, value)
 
-    validate_file_meta(fd.file_meta, enforce_standard=True)
+    ds.StudyInstanceUID = '1.3.6.1.4.1.5962.1.2.1.20040119072730.12322'
+    ds.SeriesInstanceUID = '1.3.6.1.4.1.5962.1.3.1.1.20040119072730.12322'
+    ds.ImageComments = 'AAAAAAAAAA'
 
-    fd.PixelData = (image * 255).astype(np.uint16).tobytes()
-    fd.save_as(path)
+    ds.SamplesPerPixel = 1
+    ds.PhotometricInterpretation = 'MONOCHROME2'
+    ds.Rows = image.shape[0]
+    ds.Columns = image.shape[1]
+
+    ds.BitsAllocated = 16
+    ds.BitsStored = 16
+    ds.HighBit = 15
+    ds.PixelRepresentation = 1
+    ds.PixelPaddingValue = -2000
+    ds.RescaleIntercept = "-1024.0"
+    ds.RescaleSlope = "1.0"
+    saved_image = image
+    saved_image = saved_image / np.max(saved_image)
+    saved_image = saved_image * (2 ^ 16 - 1)
+    saved_image[saved_image < 0] = 0
+    saved_image = saved_image.astype(np.uint16)
+    ds.PixelData = saved_image
+
+    ds.file_meta = file_meta
+    ds.is_implicit_VR = True
+    ds.is_little_endian = True
+    ds.save_as(path, write_like_original=False)
 
 
 def save_dicom(picture):
@@ -125,7 +133,7 @@ def save_dicom(picture):
         if save_btn:
             timestamp = str(datetime.timestamp(datetime.now())).split('.')[0]
             write_dicom(f'results/results_{timestamp}.dcm', picture, dict(
-                PatientName=surname_name,
+                PatientName=surname_name.replace(' ', '^'),
                 PatientID=pesel,
                 PatientComments=comment,
                 StudyDate=test_date
